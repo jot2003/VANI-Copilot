@@ -1,11 +1,29 @@
+import json
 from collections.abc import AsyncGenerator
 
 import httpx
 import structlog
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
 
 from app.core.config import settings
 
 logger = structlog.get_logger()
+
+_RETRYABLE = (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout)
+
+_retry_policy = retry(
+    retry=retry_if_exception_type(_RETRYABLE),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    before_sleep=before_sleep_log(logger, "WARNING"),
+    reraise=True,
+)
 
 
 class LLMService:
@@ -21,7 +39,6 @@ class LLMService:
         if provider == "openai" and settings.openai_api_key:
             return await self._openai_generate(system_prompt, user_prompt)
 
-        # No LLM configured — extract context from system prompt and return it
         return self._retrieval_only_fallback(system_prompt, user_prompt)
 
     async def stream(self, system_prompt: str, user_prompt: str) -> AsyncGenerator[str, None]:
@@ -71,6 +88,7 @@ class LLMService:
 
     # --- Ollama ---
 
+    @_retry_policy
     async def _ollama_generate(self, system_prompt: str, user_prompt: str) -> str:
         url = f"{settings.ollama_base_url}/api/chat"
         payload = {
@@ -82,7 +100,7 @@ class LLMService:
             "stream": False,
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             return resp.json()["message"]["content"]
@@ -98,13 +116,12 @@ class LLMService:
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             async with client.stream("POST", url, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line:
                         continue
-                    import json
                     data = json.loads(line)
                     token = data.get("message", {}).get("content", "")
                     if token:
@@ -114,6 +131,7 @@ class LLMService:
 
     # --- Azure OpenAI ---
 
+    @_retry_policy
     async def _azure_generate(self, system_prompt: str, user_prompt: str) -> str:
         url = (
             f"{settings.azure_openai_endpoint.rstrip('/')}"
@@ -128,7 +146,7 @@ class LLMService:
             ],
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
@@ -148,7 +166,7 @@ class LLMService:
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -157,7 +175,6 @@ class LLMService:
                     data_str = line[6:]
                     if data_str == "[DONE]":
                         break
-                    import json
                     data = json.loads(data_str)
                     delta = data["choices"][0].get("delta", {})
                     token = delta.get("content", "")
@@ -166,6 +183,7 @@ class LLMService:
 
     # --- OpenAI ---
 
+    @_retry_policy
     async def _openai_generate(self, system_prompt: str, user_prompt: str) -> str:
         url = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
@@ -177,7 +195,7 @@ class LLMService:
             ],
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
@@ -194,7 +212,7 @@ class LLMService:
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -203,7 +221,6 @@ class LLMService:
                     data_str = line[6:]
                     if data_str == "[DONE]":
                         break
-                    import json
                     data = json.loads(data_str)
                     delta = data["choices"][0].get("delta", {})
                     token = delta.get("content", "")

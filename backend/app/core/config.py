@@ -42,13 +42,25 @@ class Settings(BaseSettings):
 
     # Security
     api_key: str = "vani-copilot-dev-key"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:3001"
 
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Timeouts (seconds)
+    llm_timeout: float = 120.0
+    agent_timeout: float = 60.0
+
+    # Rate limiting
+    rate_limit: str = "30/minute"
+
     # Conversation memory
     max_history_messages: int = 5
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def db_url(self) -> str:

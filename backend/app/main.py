@@ -51,9 +51,18 @@ async def lifespan(app: FastAPI):
             logger.warning("agent_init_failed", error=str(e), msg="Will use direct RAG")
             settings.agent_enabled = False
 
-    logger.info("startup_complete", agent=settings.agent_enabled, llm=settings.llm_provider)
+    logger.info(
+        "startup_complete",
+        agent=settings.agent_enabled,
+        llm=settings.llm_provider,
+        cors_origins=settings.cors_origin_list,
+    )
     yield
     logger.info("shutting_down")
+    embed_svc = EmbeddingService.get_instance()
+    if hasattr(embed_svc, "model"):
+        del embed_svc.model
+    logger.info("shutdown_complete")
 
 
 app = FastAPI(

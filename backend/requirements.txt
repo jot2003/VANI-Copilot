@@ -1,32 +1,33 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-pydantic-settings
-httpx
-sse-starlette
-python-multipart
+# Core
+fastapi==0.115.14
+uvicorn[standard]==0.42.0
+python-dotenv==1.0.1
+pydantic-settings==2.7.1
+httpx==0.28.1
+sse-starlette==1.8.2
+python-multipart==0.0.22
 
 # ML / RAG
-faiss-cpu
-sentence-transformers
-numpy
+faiss-cpu==1.13.2
+sentence-transformers==5.3.0
+numpy==2.3.5
 
 # LangChain Agent
-langchain
-langchain-openai
-langchain-community
+langchain==0.3.1
+langchain-openai==0.3.19
+langchain-community==0.3.31
 
 # Database
-sqlalchemy
-aiosqlite
+sqlalchemy==2.0.35
+aiosqlite==0.21.0
 
 # Logging & Middleware
-structlog
-slowapi
+structlog==24.4.0
+slowapi==0.1.9
 
-# Dataset download
-datasets
-huggingface-hub
+# Resilience
+tenacity==8.5.0
 
-# Evaluation (for local exploration)
-pandas
+# Data utilities
+pandas==2.2.3
+huggingface-hub==0.36.0

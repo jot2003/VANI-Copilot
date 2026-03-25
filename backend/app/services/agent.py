@@ -6,6 +6,7 @@ Falls back to direct RAG if agent fails.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 
@@ -124,7 +125,13 @@ class AgentService:
         history: list[dict] | None = None,
     ) -> AgentResult:
         try:
-            return await self._run_agent(message, history)
+            return await asyncio.wait_for(
+                self._run_agent(message, history),
+                timeout=settings.agent_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("agent_timeout", timeout=settings.agent_timeout)
+            return await self._fallback_rag(message, history)
         except Exception as e:
             logger.error("agent_failed", error=str(e))
             return await self._fallback_rag(message, history)
