@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { Copy, Check, ThumbsUp, ThumbsDown, FileText, AlertTriangle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { ChatMessage } from '../../types'
+import { sendFeedback } from '../../services/api'
 import { TypingIndicator } from './TypingIndicator'
 import { IntentBadge } from './IntentBadge'
 
 interface Props {
   message: ChatMessage
+  conversationId?: string | null
 }
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({ message, conversationId }: Props) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<number | null>(null)
   const isUser = message.role === 'user'
@@ -64,7 +66,12 @@ export function MessageBubble({ message }: Props) {
               {copied ? <Check size={14} /> : <Copy size={14} />}
             </button>
             <button
-              onClick={() => setFeedback(1)}
+              onClick={() => {
+                setFeedback(1)
+                if (conversationId && message.id) {
+                  sendFeedback(conversationId, message.id, 1).catch(() => {})
+                }
+              }}
               className={`rounded p-1 transition-colors ${
                 feedback === 1
                   ? 'text-green-500'
@@ -75,7 +82,12 @@ export function MessageBubble({ message }: Props) {
               <ThumbsUp size={14} />
             </button>
             <button
-              onClick={() => setFeedback(-1)}
+              onClick={() => {
+                setFeedback(-1)
+                if (conversationId && message.id) {
+                  sendFeedback(conversationId, message.id, -1).catch(() => {})
+                }
+              }}
               className={`rounded p-1 transition-colors ${
                 feedback === -1
                   ? 'text-destructive'

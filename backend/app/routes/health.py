@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.core.config import settings
 from app.services.embedding import EmbeddingService
+from app.services.reranker import RerankerService
 from app.services.retriever import Retriever
 
 router = APIRouter(tags=["health"])
@@ -11,6 +12,7 @@ router = APIRouter(tags=["health"])
 async def health_check():
     retriever = Retriever.get_instance()
     embedding = EmbeddingService.get_instance()
+    reranker = RerankerService.get_instance()
 
     return {
         "status": "ok",
@@ -21,4 +23,5 @@ async def health_check():
         "embedding_model_loaded": embedding.is_loaded,
         "embedding_model": settings.resolved_embedding_model,
         "reranker_enabled": settings.reranker_enabled,
+        "reranker_loaded": reranker.is_loaded,
     }

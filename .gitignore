@@ -38,6 +38,15 @@ Thumbs.db
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
+# Model weights (too large for git)
+models/*.gguf
+models/embedding-finetuned/model.safetensors
+models/reranker-finetuned/model.safetensors
+*.zip
+
+# Downloaded notebooks from Colab
+notebooks/drive-download*/
+
 # Separate projects
 JInterview/
 

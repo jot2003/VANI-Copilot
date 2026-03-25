@@ -13,7 +13,7 @@ const QUICK_PROMPTS = [
 ]
 
 export function ChatWindow() {
-  const { messages } = useChatStore()
+  const { messages, currentConversationId } = useChatStore()
   const { send } = useChat()
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -50,7 +50,7 @@ export function ChatWindow() {
         ) : (
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
+              <MessageBubble key={i} message={msg} conversationId={currentConversationId} />
             ))}
             <div ref={bottomRef} />
           </div>

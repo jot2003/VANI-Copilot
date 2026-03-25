@@ -62,7 +62,7 @@ class Retriever:
             chunk["score"] = float(1 / (1 + dist))  # convert L2 distance to similarity
             results.append(chunk)
 
-        return results[:settings.top_k_rerank]
+        return results
 
     def build_index(self, chunks: list[dict]) -> None:
         """Build FAISS index from chunks and save to disk."""

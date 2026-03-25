@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 import structlog
 
+from app.core.config import settings
 from app.models.database import Message
 from app.models.schemas import SourceReference
 from app.prompts.templates import (
@@ -11,16 +12,18 @@ from app.prompts.templates import (
     USER_PROMPT_WITH_HISTORY,
 )
 from app.services.llm import LLMService
+from app.services.reranker import RerankerService
 from app.services.retriever import Retriever
 
 logger = structlog.get_logger()
 
 
 class RAGService:
-    """Orchestrates the full RAG pipeline: retrieve context -> build prompt -> call LLM."""
+    """Orchestrates the full RAG pipeline: retrieve -> rerank -> build prompt -> call LLM."""
 
     def __init__(self):
         self.retriever = Retriever.get_instance()
+        self.reranker = RerankerService.get_instance()
         self.llm = LLMService()
 
     def _build_prompts(
@@ -30,11 +33,18 @@ class RAGService:
         shop_name: str = DEFAULT_SHOP_NAME,
     ) -> tuple[str, str, list[SourceReference]]:
         retrieved = self.retriever.search(message)
+
+        if self.reranker.is_loaded:
+            retrieved = self.reranker.rerank(message, retrieved, top_k=settings.top_k_rerank)
+            logger.info("reranker_applied", candidates=len(retrieved))
+        else:
+            retrieved = retrieved[:settings.top_k_rerank]
+
         sources = [
             SourceReference(
                 content=chunk["content"],
                 source_file=chunk["source_file"],
-                score=chunk["score"],
+                score=chunk.get("rerank_score", chunk["score"]),
             )
             for chunk in retrieved
         ]

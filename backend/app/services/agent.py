@@ -76,7 +76,6 @@ class AgentService:
                 azure_deployment=settings.azure_openai_deployment,
                 api_version=settings.azure_openai_api_version,
                 api_key=settings.azure_openai_api_key,
-                temperature=0.7,
             )
             logger.info("agent_llm_ready", provider="azure_openai")
         elif settings.openai_api_key:
@@ -171,36 +170,70 @@ class AgentService:
                 handoff = True
 
             if tool_name in ("search_knowledge_base", "search_products"):
-                retriever = __import__("app.services.retriever", fromlist=["Retriever"]).Retriever
-                r = retriever.get_instance()
-                for chunk in r.chunks[:5]:
-                    sources.append({
-                        "content": chunk["content"][:200],
-                        "source_file": chunk["source_file"],
-                        "score": 0.0,
-                    })
+                sources.extend(self._parse_tool_sources(str(observation)))
 
         if not used_tools:
             intent = "chitchat"
 
         reply = result.get("output", "")
 
+        confidence = self._compute_confidence(used_tools, handoff, reply)
+
         logger.info(
             "agent_response",
             intent=intent,
             tools=used_tools,
             handoff=handoff,
+            confidence=confidence,
             reply_len=len(reply),
         )
 
         return AgentResult(
             reply=reply,
             intent=intent,
-            confidence=0.9 if not handoff else 0.3,
+            confidence=confidence,
             sources=sources[:5],
             used_tools=used_tools,
             handoff_suggested=handoff,
         )
+
+    @staticmethod
+    def _parse_tool_sources(observation: str) -> list[dict]:
+        """Extract sources from tool observation text (format: [filename] content)."""
+        sources = []
+        if not observation or observation.startswith("Không tìm thấy"):
+            return sources
+
+        for block in observation.split("\n\n---\n\n"):
+            block = block.strip()
+            if not block:
+                continue
+            if block.startswith("[") and "]" in block:
+                bracket_end = block.index("]")
+                source_file = block[1:bracket_end]
+                content = block[bracket_end + 1:].strip()
+            else:
+                source_file = "knowledge_base"
+                content = block
+            sources.append({
+                "content": content[:200],
+                "source_file": source_file,
+                "score": 0.0,
+            })
+        return sources
+
+    @staticmethod
+    def _compute_confidence(used_tools: list[str], handoff: bool, reply: str) -> float:
+        if handoff:
+            return 0.3
+        if not used_tools:
+            return 0.7 if len(reply) > 20 else 0.5
+        if "fallback_rag" in used_tools:
+            return 0.5
+        has_retrieval = any(t in used_tools for t in ("search_knowledge_base", "search_products"))
+        if has_retrieval and len(reply) > 50:
+            return 0.9
+        return 0.75
 
     async def _fallback_rag(
         self,

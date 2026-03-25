@@ -1,12 +1,13 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.config import settings
+from app.core.middleware import limiter
 from app.core.security import verify_api_key
-from app.models.database import get_session
+from app.models.database import AnalyticsEvent, get_session
 from app.models.schemas import ChatRequest, ChatResponse, SourceReference, StreamChunk
 from app.services.conversation import ConversationService
 
@@ -23,14 +24,16 @@ async def _get_agent_or_rag():
 
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit("30/minute")
 async def chat(
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     session: AsyncSession = Depends(get_session),
 ):
     conv_service = ConversationService(session)
-    conversation = await conv_service.get_or_create(request.conversation_id)
+    conversation = await conv_service.get_or_create(body.conversation_id)
 
-    await conv_service.add_message(conversation.id, "user", request.message)
+    await conv_service.add_message(conversation.id, "user", body.message)
     history = await conv_service.get_history(conversation.id)
 
     service, is_agent = await _get_agent_or_rag()
@@ -40,9 +43,21 @@ async def chat(
             {"role": m.role, "content": m.content}
             for m in (history or [])
         ]
-        result = await service.run(request.message, history_dicts)
+        result = await service.run(body.message, history_dicts)
 
         await conv_service.add_message(conversation.id, "assistant", result.reply)
+
+        session.add(AnalyticsEvent(
+            event_type="chat_query",
+            intent=result.intent,
+            confidence=int(result.confidence * 100),
+            data=json.dumps({
+                "tools": result.used_tools,
+                "sources_count": len(result.sources),
+                "handoff": result.handoff_suggested,
+                "conversation_id": conversation.id,
+            }, ensure_ascii=False),
+        ))
         await session.commit()
 
         sources = [
@@ -64,9 +79,20 @@ async def chat(
             handoff_suggested=result.handoff_suggested,
         )
 
-    # Direct RAG path (agent disabled)
-    reply, sources = await service.generate(request.message, history)
+    # Direct RAG path
+    reply, sources = await service.generate(body.message, history)
     await conv_service.add_message(conversation.id, "assistant", reply)
+
+    session.add(AnalyticsEvent(
+        event_type="chat_query",
+        intent="rag",
+        confidence=80,
+        data=json.dumps({
+            "tools": ["rag"],
+            "sources_count": len(sources),
+            "conversation_id": conversation.id,
+        }, ensure_ascii=False),
+    ))
     await session.commit()
 
     return ChatResponse(
@@ -77,29 +103,40 @@ async def chat(
 
 
 @router.post("/chat/stream")
+@limiter.limit("30/minute")
 async def chat_stream(
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     session: AsyncSession = Depends(get_session),
 ):
     conv_service = ConversationService(session)
-    conversation = await conv_service.get_or_create(request.conversation_id)
+    conversation = await conv_service.get_or_create(body.conversation_id)
 
-    await conv_service.add_message(conversation.id, "user", request.message)
+    await conv_service.add_message(conversation.id, "user", body.message)
     history = await conv_service.get_history(conversation.id)
 
     service, is_agent = await _get_agent_or_rag()
 
     if is_agent:
-        # Agent doesn't stream — run fully then send result as SSE
         history_dicts = [
             {"role": m.role, "content": m.content}
             for m in (history or [])
         ]
-        result = await service.run(request.message, history_dicts)
+        result = await service.run(body.message, history_dicts)
 
         async def agent_event_generator():
-            # Send full reply as single chunk (agent doesn't support token streaming)
             await conv_service.add_message(conversation.id, "assistant", result.reply)
+            session.add(AnalyticsEvent(
+                event_type="chat_query",
+                intent=result.intent,
+                confidence=int(result.confidence * 100),
+                data=json.dumps({
+                    "tools": result.used_tools,
+                    "sources_count": len(result.sources),
+                    "handoff": result.handoff_suggested,
+                    "conversation_id": conversation.id,
+                }, ensure_ascii=False),
+            ))
             await session.commit()
 
             sources = [
@@ -126,7 +163,7 @@ async def chat_stream(
         return EventSourceResponse(agent_event_generator())
 
     # Direct RAG streaming path
-    token_stream, sources = await service.stream(request.message, history)
+    token_stream, sources = await service.stream(body.message, history)
 
     async def rag_event_generator():
         full_reply = ""
@@ -136,6 +173,16 @@ async def chat_stream(
             yield {"data": chunk.model_dump_json()}
 
         await conv_service.add_message(conversation.id, "assistant", full_reply)
+        session.add(AnalyticsEvent(
+            event_type="chat_query",
+            intent="rag",
+            confidence=80,
+            data=json.dumps({
+                "tools": ["rag"],
+                "sources_count": len(sources),
+                "conversation_id": conversation.id,
+            }, ensure_ascii=False),
+        ))
         await session.commit()
 
         final = StreamChunk(

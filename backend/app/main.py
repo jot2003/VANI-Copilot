@@ -9,6 +9,7 @@ from app.core.middleware import setup_middleware
 from app.models.database import init_db
 from app.routes import admin, analytics, chat, conversations, health
 from app.services.embedding import EmbeddingService
+from app.services.reranker import RerankerService
 from app.services.retriever import Retriever
 
 # Fix Windows cp1252 console encoding for Vietnamese text
@@ -36,6 +37,9 @@ async def lifespan(app: FastAPI):
 
     retriever = Retriever.get_instance()
     retriever.load_index()
+
+    reranker = RerankerService.get_instance()
+    reranker.load_model()
 
     if settings.agent_enabled:
         from app.services.agent import AgentService
