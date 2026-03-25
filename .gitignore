@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment
+.env
+
+# Data (raw datasets - too large for git)
+backend/data/raw/
+*.db
+
+# FAISS index (rebuild from scripts)
+backend/vectorstore/faiss_index/
+
+# Stale node_modules
+node_modules_old/
+frontend/node_modules_old/
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Separate projects
+JInterview/
+
+# Personal files
+jd/
+
+# LaTeX aux
+*.aux
+*.log
+*.out
+*.synctex.gz

@@ -1,0 +1,32 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic-settings
+httpx
+sse-starlette
+python-multipart
+
+# ML / RAG
+faiss-cpu
+sentence-transformers
+numpy
+
+# LangChain Agent
+langchain
+langchain-openai
+langchain-community
+
+# Database
+sqlalchemy
+aiosqlite
+
+# Logging & Middleware
+structlog
+slowapi
+
+# Dataset download
+datasets
+huggingface-hub
+
+# Evaluation (for local exploration)
+pandas
