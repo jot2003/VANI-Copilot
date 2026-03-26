@@ -9,6 +9,7 @@ interface ChatState {
   isLoading: boolean
   isDarkMode: boolean
   sidebarOpen: boolean
+  abortController: AbortController | null
 
   setPage: (page: AppPage) => void
   setConversations: (conversations: Conversation[]) => void
@@ -23,16 +24,19 @@ interface ChatState {
   toggleDarkMode: () => void
   toggleSidebar: () => void
   newConversation: () => void
+  setAbortController: (controller: AbortController | null) => void
+  stopGeneration: () => void
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   currentPage: 'chat' as AppPage,
   conversations: [],
   currentConversationId: null,
   messages: [],
   isLoading: false,
-  isDarkMode: false,
+  isDarkMode: true,
   sidebarOpen: true,
+  abortController: null,
 
   setPage: (page) => set({ currentPage: page }),
   setConversations: (conversations) => set({ conversations }),
@@ -95,4 +99,22 @@ export const useChatStore = create<ChatState>((set) => ({
 
   newConversation: () =>
     set({ currentConversationId: null, messages: [] }),
+
+  setAbortController: (controller) => set({ abortController: controller }),
+
+  stopGeneration: () => {
+    const { abortController } = get()
+    if (abortController) {
+      abortController.abort()
+      set({ abortController: null, isLoading: false })
+    }
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last && last.role === 'assistant' && last.isStreaming) {
+        msgs[msgs.length - 1] = { ...last, isStreaming: false }
+      }
+      return { messages: msgs }
+    })
+  },
 }))

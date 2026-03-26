@@ -60,8 +60,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("shutting_down")
     embed_svc = EmbeddingService.get_instance()
-    if hasattr(embed_svc, "model"):
-        del embed_svc.model
+    embed_svc._model = None
     logger.info("shutdown_complete")
 
 

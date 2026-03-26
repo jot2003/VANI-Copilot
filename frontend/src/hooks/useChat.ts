@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { toast } from 'sonner'
 import { streamMessage, fetchConversations } from '../services/api'
 import { useChatStore } from '../store/chatStore'
 
@@ -13,11 +14,15 @@ export function useChat() {
     setLoading,
     setCurrentConversation,
     setConversations,
+    setAbortController,
   } = useChatStore()
 
   const send = useCallback(
     async (message: string) => {
       if (!message.trim() || isLoading) return
+
+      const controller = new AbortController()
+      setAbortController(controller)
 
       addMessage({ role: 'user', content: message })
       addMessage({ role: 'assistant', content: '', isStreaming: true })
@@ -43,11 +48,20 @@ export function useChat() {
               .then((convs) => setConversations(convs))
               .catch(() => {})
           },
+          controller.signal,
         )
-      } catch (err) {
-        appendToLastMessage('\n\n[Error: Could not get response. Check if backend is running.]')
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          toast.info('Generation stopped')
+        } else {
+          toast.error('Could not get response. Check if backend is running.')
+          appendToLastMessage(
+            '\n\n⚠️ *Error: Could not get response. Please check if the backend is running.*',
+          )
+        }
       } finally {
         setLoading(false)
+        setAbortController(null)
       }
     },
     [
@@ -60,6 +74,7 @@ export function useChat() {
       setLoading,
       setCurrentConversation,
       setConversations,
+      setAbortController,
     ],
   )
 

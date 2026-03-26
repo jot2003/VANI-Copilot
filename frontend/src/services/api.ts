@@ -27,11 +27,13 @@ export async function streamMessage(
     used_tools?: string[]
     handoff_suggested?: boolean
   }) => void,
+  signal?: AbortSignal,
 ) {
   const res = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { ...headers, Accept: 'text/event-stream' },
     body: JSON.stringify({ message, conversation_id: conversationId }),
+    signal,
   })
 
   if (!res.ok) throw new Error(`Stream failed: ${res.status}`)
@@ -42,37 +44,41 @@ export async function streamMessage(
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const jsonStr = line.slice(6).trim()
-      if (!jsonStr) continue
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr) continue
 
-      try {
-        const chunk = JSON.parse(jsonStr)
-        if (chunk.done) {
-          onDone({
-            conversation_id: chunk.conversation_id,
-            sources: chunk.sources || [],
-            intent: chunk.intent,
-            confidence: chunk.confidence,
-            used_tools: chunk.used_tools,
-            handoff_suggested: chunk.handoff_suggested,
-          })
-        } else if (chunk.token) {
-          onToken(chunk.token)
+        try {
+          const chunk = JSON.parse(jsonStr)
+          if (chunk.done) {
+            onDone({
+              conversation_id: chunk.conversation_id,
+              sources: chunk.sources || [],
+              intent: chunk.intent,
+              confidence: chunk.confidence,
+              used_tools: chunk.used_tools,
+              handoff_suggested: chunk.handoff_suggested,
+            })
+          } else if (chunk.token) {
+            onToken(chunk.token)
+          }
+        } catch {
+          // skip malformed chunks
         }
-      } catch {
-        // skip malformed chunks
       }
     }
+  } finally {
+    reader.releaseLock()
   }
 }
 
