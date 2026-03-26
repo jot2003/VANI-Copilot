@@ -31,3 +31,7 @@ tenacity==8.5.0
 # Data utilities
 pandas==2.2.3
 huggingface-hub==0.36.0
+
+# Testing (dev)
+pytest>=8.0
+pytest-asyncio>=1.0

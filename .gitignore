@@ -38,6 +38,10 @@ Thumbs.db
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
+# Test artifacts
+backend/data/test_copilot.db
+.pytest_cache/
+
 # Model weights (too large for git)
 models/*.gguf
 models/embedding-finetuned/model.safetensors
